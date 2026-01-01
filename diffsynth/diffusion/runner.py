@@ -13,47 +13,33 @@ except ImportError:
 
 
 def run_validation(model, prompts, height, width, num_frames, output_dir, global_step, use_wandb, input_images=None):
-    """Generate validation samples during training."""
-    model.eval()
-    pipe = model.pipe
+    """Generate validation samples during training.
+
+    Note: Validation is run in a separate process or with careful state management
+    to avoid corrupting the training pipeline state.
+    """
+    import copy
 
     os.makedirs(output_dir, exist_ok=True)
     images_to_log = []
 
-    with torch.no_grad():
-        for i, prompt in enumerate(prompts):
-            try:
-                # T2I generation
-                result = pipe(
-                    prompt=prompt,
-                    height=height,
-                    width=width,
-                    num_frames=num_frames if num_frames else 1,
-                    num_inference_steps=20,
-                    cfg_scale=5.0,
-                    seed=42,
-                    tiled=True,
-                )
+    # Save scheduler state before validation
+    pipe = model.module.pipe if hasattr(model, 'module') else model.pipe
+    scheduler_timesteps_backup = pipe.scheduler.timesteps.clone() if hasattr(pipe.scheduler, 'timesteps') else None
+    scheduler_training_backup = getattr(pipe.scheduler, 'training', True)
 
-                if result and len(result) > 0:
-                    img = result[0]
-                    save_path = os.path.join(output_dir, f"step_{global_step}_t2i_{i}.png")
-                    img.save(save_path)
-                    images_to_log.append(("t2i", prompt, img))
+    try:
+        model.eval()
 
-                # I2I generation if input images provided
-                if input_images and i < len(input_images):
-                    input_img = input_images[i]
-                    if isinstance(input_img, str):
-                        input_img = Image.open(input_img)
-
+        with torch.no_grad():
+            for i, prompt in enumerate(prompts):
+                try:
+                    # T2I generation (text-to-image only for validation)
                     result = pipe(
                         prompt=prompt,
-                        input_video=[input_img],
-                        denoising_strength=0.7,
-                        height=input_img.height,
-                        width=input_img.width,
-                        num_frames=1,
+                        height=height,
+                        width=width,
+                        num_frames=num_frames if num_frames else 1,
                         num_inference_steps=20,
                         cfg_scale=5.0,
                         seed=42,
@@ -62,21 +48,60 @@ def run_validation(model, prompts, height, width, num_frames, output_dir, global
 
                     if result and len(result) > 0:
                         img = result[0]
-                        save_path = os.path.join(output_dir, f"step_{global_step}_i2i_{i}.png")
+                        save_path = os.path.join(output_dir, f"step_{global_step}_t2i_{i}.png")
                         img.save(save_path)
-                        images_to_log.append(("i2i", prompt, img))
+                        images_to_log.append(("t2i", prompt, img))
 
-            except Exception as e:
-                print(f"Validation error for prompt '{prompt}': {e}")
+                    # I2I generation with CLIP conditioning (no VAE init)
+                    if input_images and i < len(input_images):
+                        input_img = input_images[i]
+                        if isinstance(input_img, str):
+                            input_img = Image.open(input_img)
 
-    # Log to wandb
-    if use_wandb and WANDB_AVAILABLE and images_to_log:
-        wandb_images = []
-        for img_type, prompt, img in images_to_log:
-            wandb_images.append(wandb.Image(img, caption=f"{img_type}: {prompt[:50]}"))
-        wandb.log({"validation/samples": wandb_images}, step=global_step)
+                        result = pipe(
+                            prompt=prompt,
+                            input_image=input_img,  # CLIP conditioning only
+                            height=height,
+                            width=width,
+                            num_frames=1,
+                            num_inference_steps=20,
+                            cfg_scale=5.0,
+                            seed=42,
+                            tiled=True,
+                        )
 
-    model.train()
+                        if result and len(result) > 0:
+                            img = result[0]
+                            save_path = os.path.join(output_dir, f"step_{global_step}_i2i_{i}.png")
+                            img.save(save_path)
+                            images_to_log.append(("i2i", prompt, img))
+
+                except Exception as e:
+                    print(f"Validation error for prompt '{prompt}': {e}")
+                    import traceback
+                    traceback.print_exc()
+
+        # Log to wandb
+        if use_wandb and WANDB_AVAILABLE and images_to_log:
+            wandb_images = []
+            for img_type, prompt, img in images_to_log:
+                wandb_images.append(wandb.Image(img, caption=f"{img_type}: {prompt[:50]}"))
+            wandb.log({"validation/samples": wandb_images}, step=global_step)
+
+    except Exception as e:
+        print(f"Validation failed: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Restore model to training mode
+        model.train()
+
+        # Restore scheduler state
+        if scheduler_timesteps_backup is not None:
+            pipe.scheduler.timesteps = scheduler_timesteps_backup
+        # Restore scheduler.training flag (critical for input_latents to be returned)
+        pipe.scheduler.training = scheduler_training_backup
+
     return len(images_to_log)
 
 
@@ -117,7 +142,7 @@ def launch_training_task(
     if isinstance(validation_prompts, str):
         validation_prompts = [p.strip() for p in validation_prompts.split('|')]
     if isinstance(validation_images, str):
-        validation_images = [p.strip() for p in validation_images.split(',')]
+        validation_images = [os.path.abspath(p.strip()) for p in validation_images.split(',')]
 
     # Initialize wandb
     if use_wandb and WANDB_AVAILABLE and accelerator.is_main_process:

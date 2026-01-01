@@ -131,3 +131,10 @@ Key differences from standard I2V:
 ## License
 
 Apache 2.0
+
+
+
+
+### ideas, useful
+https://huggingface.co/datasets/laion/relaion-art/viewer/default/train?p=2&views%5B%5D=train
+https://huggingface.co/datasets/laion/relaion-pop/viewer/default/train?p=2
