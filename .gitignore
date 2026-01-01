@@ -1,0 +1,46 @@
+# Virtual environments
+.venv/
+venv/
+envs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Models and large files
+*.safetensors
+*.pth
+*.ckpt
+*.bin
+models/
+*.onnx
+
+# Data
+data/
+*.mp4
+*.avi
+*.mov
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+wandb/
+
+# Flash attention build
+flash-attention/
+
+# Temp
+*.tmp
+.cache/
+example_video_dataset/
+.github/
