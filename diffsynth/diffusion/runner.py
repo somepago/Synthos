@@ -75,7 +75,9 @@ def run_validation(model, prompts, height, width, num_frames, output_dir, global
                             img = result[0]
                             save_path = os.path.join(output_dir, f"step_{global_step}_i2i_{i}.png")
                             img.save(save_path)
-                            images_to_log.append(("i2i", prompt, img))
+                            # Use input image path as caption for I2I (not the T2I prompt)
+                            img_caption = input_images[i] if isinstance(input_images[i], str) else f"image_{i}"
+                            images_to_log.append(("i2i", img_caption, img))
 
                 except Exception as e:
                     print(f"Validation error for prompt '{prompt}': {e}")

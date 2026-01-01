@@ -27,6 +27,8 @@ class WanTrainingModule(DiffusionTrainingModule):
         min_timestep_boundary=0.0,
         # I2I variation mode: CLIP conditioning without VAE embedding
         i2i_mode=False,
+        # Train only img_emb layer (freeze rest of DiT)
+        train_img_emb_only=False,
         # Conditioning dropout for classifier-free guidance style training
         text_dropout_prob=0.1,
         image_dropout_prob=0.1,
@@ -60,6 +62,10 @@ class WanTrainingModule(DiffusionTrainingModule):
             preset_lora_path, preset_lora_model,
             task=task,
         )
+
+        # If train_img_emb_only, freeze everything except img_emb
+        if train_img_emb_only and i2i_mode:
+            self._freeze_except_img_emb()
 
         # Store other configs
         self.use_gradient_checkpointing = use_gradient_checkpointing
@@ -111,7 +117,27 @@ class WanTrainingModule(DiffusionTrainingModule):
             raise ValueError("I2I mode requires image_encoder. Add CLIP model to model_configs.")
 
         print(f"I2I mode enabled: has_clip_input={dit.has_clip_input}, require_vae_embedding={dit.require_vae_embedding}")
-        
+
+    def _freeze_except_img_emb(self):
+        """Freeze all DiT parameters except img_emb layer."""
+        dit = self.pipe.dit
+
+        # First freeze everything in DiT
+        for param in dit.parameters():
+            param.requires_grad = False
+
+        # Then unfreeze only img_emb
+        if hasattr(dit, 'img_emb') and dit.img_emb is not None:
+            for param in dit.img_emb.parameters():
+                param.requires_grad = True
+
+            # Count trainable params
+            trainable_params = sum(p.numel() for p in dit.img_emb.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in dit.parameters())
+            print(f"train_img_emb_only: Trainable params: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.2f}%)")
+        else:
+            raise ValueError("train_img_emb_only requires img_emb layer. Enable --i2i_mode first.")
+
     def parse_extra_inputs(self, data, extra_inputs, inputs_shared):
         for extra_input in extra_inputs:
             if extra_input == "input_image":
@@ -183,6 +209,7 @@ def wan_parser():
     parser.add_argument("--initialize_model_on_cpu", default=False, action="store_true", help="Whether to initialize models on CPU.")
     # I2I variation mode
     parser.add_argument("--i2i_mode", default=False, action="store_true", help="Enable I2I variation mode: CLIP-only image conditioning without VAE embedding.")
+    parser.add_argument("--train_img_emb_only", default=False, action="store_true", help="Train only img_emb layer (freeze rest of DiT). Requires --i2i_mode.")
     # Conditioning dropout for CFG training
     parser.add_argument("--text_dropout_prob", type=float, default=0.1, help="Probability of dropping text conditioning (for CFG training).")
     parser.add_argument("--image_dropout_prob", type=float, default=0.1, help="Probability of dropping image conditioning (for CFG training).")
@@ -239,6 +266,7 @@ if __name__ == "__main__":
         max_timestep_boundary=args.max_timestep_boundary,
         min_timestep_boundary=args.min_timestep_boundary,
         i2i_mode=args.i2i_mode,
+        train_img_emb_only=args.train_img_emb_only,
         text_dropout_prob=args.text_dropout_prob,
         image_dropout_prob=args.image_dropout_prob,
     )
