@@ -26,6 +26,7 @@ def run_validation(model, prompts, height, width, num_frames, output_dir, global
     # Save scheduler state before validation
     pipe = model.module.pipe if hasattr(model, 'module') else model.pipe
     scheduler_timesteps_backup = pipe.scheduler.timesteps.clone() if hasattr(pipe.scheduler, 'timesteps') else None
+    scheduler_sigmas_backup = pipe.scheduler.sigmas.clone() if hasattr(pipe.scheduler, 'sigmas') else None
     scheduler_training_backup = getattr(pipe.scheduler, 'training', True)
 
     try:
@@ -99,6 +100,8 @@ def run_validation(model, prompts, height, width, num_frames, output_dir, global
         # Restore scheduler state
         if scheduler_timesteps_backup is not None:
             pipe.scheduler.timesteps = scheduler_timesteps_backup
+        if scheduler_sigmas_backup is not None:
+            pipe.scheduler.sigmas = scheduler_sigmas_backup
         # Restore scheduler.training flag (critical for input_latents to be returned)
         pipe.scheduler.training = scheduler_training_backup
 
