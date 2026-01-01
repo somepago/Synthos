@@ -28,6 +28,8 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --trainable_models "dit" \
   --extra_inputs "input_image" \
   --i2i_mode \
+  --text_dropout_prob 0.1 \
+  --image_dropout_prob 0.1 \
   --use_wandb \
   --wandb_project "wan-i2i-training" \
   --wandb_run_name "i2i-contrastyles-full" \
