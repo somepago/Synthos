@@ -1,14 +1,13 @@
-# I2I Variation Model Training
-# Base: Wan2.1-T2V-1.3B + CLIP image encoder (from I2V model)
-# Trains img_emb layer (CLIP projection) + optionally finetunes DiT
+# Synthos-I2I: CLIP-conditioned Image Generation Training
 #
 # Architecture:
-# - DiT from T2V-1.3B (in_dim=16, no VAE embedding)
-# - CLIP encoder from I2V model (ViT-H, 257 tokens per image)
-# - New img_emb layer initialized and trained
+# - DiT backbone from Wan2.1-T2V-1.3B
+# - CLIP image encoder for cross-attention conditioning
+# - No VAE latent initialization (pure CLIP guidance)
 #
-# Training data: Single images with prompts
-# The model learns to generate variations guided by CLIP embedding
+# Training:
+# - Text + image conditioning dropout for CFG
+# - Starts from noise, CLIP embedding guides via cross-attention
 
 # Mixed precision: bf16 for lower memory, fp16 also available
 accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.py \
@@ -22,17 +21,17 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --model_id_with_origin_paths "Wan-AI/Wan2.1-T2V-1.3B:models_t5_umt5-xxl-enc-bf16.pth,Wan-AI/Wan2.1-T2V-1.3B:Wan2.1_VAE.pth,PAI/Wan2.1-Fun-1.3B-InP:models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth" \
   --learning_rate 1e-5 \
   --num_epochs 10 \
-  --batch_size 1 \
+  --batch_size 4 \
   --remove_prefix_in_ckpt "pipe.dit." \
-  --output_path "./models/train/Wan2.1-I2I-1.3B_full" \
+  --output_path "./models/train/Synthos-I2I" \
   --trainable_models "dit" \
   --extra_inputs "input_image" \
   --i2i_mode \
-  --text_dropout_prob 0.1 \
-  --image_dropout_prob 0.1 \
+  --text_dropout_prob 0.2 \
+  --image_dropout_prob 0.2 \
   --use_wandb \
-  --wandb_project "wan-i2i-training" \
-  --wandb_run_name "i2i-contrastyles-full" \
+  --wandb_project "synthos-training" \
+  --wandb_run_name "synthos-i2i-contrastyles" \
   --validate_steps 500 \
   --validation_prompts "stylized sunset over mountains|cyberpunk city at night|oil painting of a forest" \
   --validation_images "data/contrastyles/images/0001.jpg,data/contrastyles/images/0005.jpg,data/contrastyles/images/0010.jpg"
