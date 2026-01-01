@@ -1,23 +1,41 @@
 # Synthos
 
-Video and Image generation framework with I2I training support.
+CLIP-conditioned image generation framework.
 
-## Features
+## Synthos-I2I
 
-- **I2I Training**: Image-to-image training with CLIP conditioning
-- **Wandb Integration**: Real-time training metrics and logging
-- **Mixed Precision**: bf16/fp16 training for lower memory usage
-- **Configurable Batch Size**: Adjust batch size for your GPU
+Image-to-image generation using CLIP cross-attention conditioning. The model generates images guided by:
+- **CLIP embeddings** from a reference image (visual style/content)
+- **Text prompts** (semantic guidance)
 
-## Setup
+Generation starts from pure noise - the reference image influences output only through cross-attention, not latent initialization.
 
-### 1. Create Environment
+## Installation
 
 ```bash
-python -m venv ~/envs/synthos
-source ~/envs/synthos/bin/activate
+git clone https://github.com/somepago/Synthos.git
+cd Synthos
 pip install -e .
 pip install wandb
+```
+
+## Training
+
+### 1. Prepare Dataset
+
+```bash
+# Download ContraStyles dataset (or use your own)
+python scripts/download_contrastyles.py
+```
+
+Dataset structure:
+```
+data/contrastyles/
+├── images/
+│   ├── 0001.jpg
+│   ├── 0002.jpg
+│   └── ...
+└── metadata.csv  # columns: video, prompt
 ```
 
 ### 2. Login to Services
@@ -27,19 +45,10 @@ wandb login
 huggingface-cli login
 ```
 
-### 3. Download Dataset
+### 3. Train
 
 ```bash
-python scripts/download_contrastyles.py  # Downloads 100 samples from ContraStyles
-```
-
-## Training
-
-### I2I Training (Full Model)
-
-```bash
-source ~/envs/synthos/bin/activate
-bash examples/wanvideo/model_training/full/Wan2.1-I2I-1.3B.sh
+bash examples/wanvideo/model_training/full/Synthos-I2I.sh
 ```
 
 ### Training Arguments
@@ -47,73 +56,77 @@ bash examples/wanvideo/model_training/full/Wan2.1-I2I-1.3B.sh
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--batch_size` | Batch size per GPU | 1 |
-| `--use_wandb` | Enable wandb logging | False |
-| `--wandb_project` | Wandb project name | diffsynth-training |
-| `--wandb_run_name` | Custom run name | auto-generated |
 | `--learning_rate` | Learning rate | 1e-5 |
 | `--num_epochs` | Number of epochs | 10 |
+| `--text_dropout_prob` | Text conditioning dropout (for CFG) | 0.1 |
+| `--image_dropout_prob` | Image conditioning dropout (for CFG) | 0.1 |
+| `--use_wandb` | Enable wandb logging | False |
+| `--validate_steps` | Run validation every N steps | None |
+| `--validation_prompts` | Validation prompts (pipe-separated) | None |
+| `--validation_images` | Validation images (comma-separated) | None |
 
 ### Mixed Precision
 
-Add `--mixed_precision bf16` to `accelerate launch` for lower memory usage:
-
-```bash
-accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.py ...
-```
+Training uses bf16 by default via `accelerate launch --mixed_precision bf16`.
 
 ## Inference
 
-### Text-to-Image
+### Python API
 
 ```python
-import torch
-from diffsynth.pipelines.wan_video import WanVideoPipeline, ModelConfig
+from examples.wanvideo.model_inference import Synthos_I2I as synthos
 
-pipe = WanVideoPipeline.from_pretrained(
-    torch_dtype=torch.bfloat16,
+# Load model
+pipe = synthos.load_synthos_i2i(
+    checkpoint_path="./models/train/Synthos-I2I/epoch-10.safetensors",
     device="cuda",
-    model_configs=[
-        ModelConfig(model_id="Wan-AI/Wan2.1-T2V-1.3B", origin_file_pattern="diffusion_pytorch_model*.safetensors"),
-        ModelConfig(model_id="Wan-AI/Wan2.1-T2V-1.3B", origin_file_pattern="models_t5_umt5-xxl-enc-bf16.pth"),
-        ModelConfig(model_id="Wan-AI/Wan2.1-T2V-1.3B", origin_file_pattern="Wan2.1_VAE.pth"),
-    ],
 )
 
-images = pipe(prompt="a beautiful sunset over mountains", num_frames=1)
-images[0].save("output.png")
-```
-
-### Image-to-Image
-
-```python
+# Generate with reference image (CLIP conditioning)
 from PIL import Image
+reference = Image.open("reference.jpg")
 
-input_image = Image.open("input.jpg")
-images = pipe(
-    prompt="stylized painting of the scene",
-    input_video=[input_image],
-    denoising_strength=0.7,
-    num_frames=1,
+output = synthos.generate(
+    pipe,
+    prompt="an oil painting in impressionist style",
+    reference_image=reference,
+    height=480,
+    width=480,
+    cfg_scale=5.0,
+    seed=42,
 )
-images[0].save("output_i2i.png")
+output.save("output.png")
+
+# Generate without reference (pure T2I)
+output = synthos.generate(
+    pipe,
+    prompt="a beautiful sunset",
+    reference_image=None,
+    height=480,
+    width=480,
+)
 ```
 
-## Project Structure
+### CLI
+
+```bash
+python examples/wanvideo/model_inference/Synthos-I2I.py
+```
+
+## Architecture
 
 ```
-synthos/
-├── diffsynth/
-│   ├── pipelines/          # Inference pipelines
-│   ├── diffusion/          # Training modules
-│   │   ├── runner.py       # Training loop with wandb
-│   │   └── parsers.py      # CLI arguments
-│   └── models/             # Model definitions
-├── examples/
-│   └── wanvideo/
-│       ├── model_inference/    # Inference scripts
-│       └── model_training/     # Training scripts
-└── data/                   # Training datasets
+Synthos-I2I
+├── DiT backbone (from Wan2.1-T2V-1.3B)
+├── T5 text encoder
+├── CLIP image encoder (cross-attention conditioning)
+└── VAE (output decoding only)
 ```
+
+Key differences from standard I2V:
+- No VAE latent initialization (`require_vae_embedding=False`)
+- CLIP embedding injected via cross-attention only
+- Trained with conditioning dropout for CFG support
 
 ## License
 

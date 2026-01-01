@@ -44,3 +44,4 @@ flash-attention/
 .cache/
 example_video_dataset/
 .github/
+docs/
