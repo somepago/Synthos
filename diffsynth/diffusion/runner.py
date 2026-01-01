@@ -53,14 +53,14 @@ def run_validation(model, prompts, height, width, num_frames, output_dir, global
                         img.save(save_path)
                         images_to_log.append(("t2i", prompt, img))
 
-                    # I2I generation with CLIP conditioning (no VAE init)
+                    # I2I generation with CLIP conditioning only (no text prompt, no VAE init)
                     if input_images and i < len(input_images):
                         input_img = input_images[i]
                         if isinstance(input_img, str):
                             input_img = Image.open(input_img)
 
                         result = pipe(
-                            prompt=prompt,
+                            prompt="",  # Empty prompt for pure I2I (CLIP conditioning only)
                             input_image=input_img,  # CLIP conditioning only
                             height=height,
                             width=width,
