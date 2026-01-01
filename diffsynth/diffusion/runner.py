@@ -3,12 +3,81 @@ from tqdm import tqdm
 from accelerate import Accelerator
 from .training_module import DiffusionTrainingModule
 from .logger import ModelLogger
+from PIL import Image
 
 try:
     import wandb
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
+
+
+def run_validation(model, prompts, height, width, num_frames, output_dir, global_step, use_wandb, input_images=None):
+    """Generate validation samples during training."""
+    model.eval()
+    pipe = model.pipe
+
+    os.makedirs(output_dir, exist_ok=True)
+    images_to_log = []
+
+    with torch.no_grad():
+        for i, prompt in enumerate(prompts):
+            try:
+                # T2I generation
+                result = pipe(
+                    prompt=prompt,
+                    height=height,
+                    width=width,
+                    num_frames=num_frames if num_frames else 1,
+                    num_inference_steps=20,
+                    cfg_scale=5.0,
+                    seed=42,
+                    tiled=True,
+                )
+
+                if result and len(result) > 0:
+                    img = result[0]
+                    save_path = os.path.join(output_dir, f"step_{global_step}_t2i_{i}.png")
+                    img.save(save_path)
+                    images_to_log.append(("t2i", prompt, img))
+
+                # I2I generation if input images provided
+                if input_images and i < len(input_images):
+                    input_img = input_images[i]
+                    if isinstance(input_img, str):
+                        input_img = Image.open(input_img)
+
+                    result = pipe(
+                        prompt=prompt,
+                        input_video=[input_img],
+                        denoising_strength=0.7,
+                        height=input_img.height,
+                        width=input_img.width,
+                        num_frames=1,
+                        num_inference_steps=20,
+                        cfg_scale=5.0,
+                        seed=42,
+                        tiled=True,
+                    )
+
+                    if result and len(result) > 0:
+                        img = result[0]
+                        save_path = os.path.join(output_dir, f"step_{global_step}_i2i_{i}.png")
+                        img.save(save_path)
+                        images_to_log.append(("i2i", prompt, img))
+
+            except Exception as e:
+                print(f"Validation error for prompt '{prompt}': {e}")
+
+    # Log to wandb
+    if use_wandb and WANDB_AVAILABLE and images_to_log:
+        wandb_images = []
+        for img_type, prompt, img in images_to_log:
+            wandb_images.append(wandb.Image(img, caption=f"{img_type}: {prompt[:50]}"))
+        wandb.log({"validation/samples": wandb_images}, step=global_step)
+
+    model.train()
+    return len(images_to_log)
 
 
 def launch_training_task(
@@ -25,6 +94,9 @@ def launch_training_task(
     use_wandb: bool = False,
     wandb_project: str = "diffsynth-training",
     wandb_run_name: str = None,
+    validate_steps: int = None,
+    validation_prompts: list = None,
+    validation_images: list = None,
     args = None,
 ):
     if args is not None:
@@ -37,6 +109,15 @@ def launch_training_task(
         use_wandb = getattr(args, 'use_wandb', False)
         wandb_project = getattr(args, 'wandb_project', 'diffsynth-training')
         wandb_run_name = getattr(args, 'wandb_run_name', None)
+        validate_steps = getattr(args, 'validate_steps', None)
+        validation_prompts = getattr(args, 'validation_prompts', None)
+        validation_images = getattr(args, 'validation_images', None)
+
+    # Parse validation prompts from comma-separated string
+    if isinstance(validation_prompts, str):
+        validation_prompts = [p.strip() for p in validation_prompts.split('|')]
+    if isinstance(validation_images, str):
+        validation_images = [p.strip() for p in validation_images.split(',')]
 
     # Initialize wandb
     if use_wandb and WANDB_AVAILABLE and accelerator.is_main_process:
@@ -124,6 +205,20 @@ def launch_training_task(
                         "train/global_step": global_step,
                         "train/lr": scheduler.get_last_lr()[0],
                     }, step=global_step)
+
+                # Run validation
+                if (validate_steps and validation_prompts and
+                    global_step % validate_steps == 0 and accelerator.is_main_process):
+                    print(f"\nRunning validation at step {global_step}...")
+                    val_output_dir = os.path.join(model_logger.output_path, "validation")
+                    height = getattr(args, 'height', 480) if args else 480
+                    width = getattr(args, 'width', 480) if args else 480
+                    num_frames = getattr(args, 'num_frames', 1) if args else 1
+                    num_samples = run_validation(
+                        model, validation_prompts, height, width, num_frames,
+                        val_output_dir, global_step, use_wandb, validation_images
+                    )
+                    print(f"Generated {num_samples} validation samples")
 
         # Log epoch metrics
         avg_epoch_loss = epoch_loss / max(num_batches, 1)

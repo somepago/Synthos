@@ -42,6 +42,10 @@ def add_training_config(parser: argparse.ArgumentParser):
     parser.add_argument("--use_wandb", default=False, action="store_true", help="Enable Weights & Biases logging.")
     parser.add_argument("--wandb_project", type=str, default="diffsynth-training", help="Wandb project name.")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="Wandb run name. If not set, uses auto-generated name.")
+    # Validation during training
+    parser.add_argument("--validate_steps", type=int, default=None, help="Run validation every N steps. If not set, no validation.")
+    parser.add_argument("--validation_prompts", type=str, default=None, help="Validation prompts separated by '|'. E.g., 'a sunset|a mountain'")
+    parser.add_argument("--validation_images", type=str, default=None, help="Validation input images for I2I, comma-separated paths.")
     return parser
 
 def add_output_config(parser: argparse.ArgumentParser):

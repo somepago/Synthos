@@ -30,4 +30,7 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --i2i_mode \
   --use_wandb \
   --wandb_project "wan-i2i-training" \
-  --wandb_run_name "i2i-contrastyles-full"
+  --wandb_run_name "i2i-contrastyles-full" \
+  --validate_steps 500 \
+  --validation_prompts "stylized sunset over mountains|cyberpunk city at night|oil painting of a forest" \
+  --validation_images "data/contrastyles/images/0001.jpg,data/contrastyles/images/0005.jpg,data/contrastyles/images/0010.jpg"
