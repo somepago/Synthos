@@ -36,11 +36,17 @@ class WanTrainingModule(DiffusionTrainingModule):
         super().__init__()
         self.text_dropout_prob = text_dropout_prob
         self.image_dropout_prob = image_dropout_prob
+        self.train_img_emb_only = train_img_emb_only
 
-        # Warning
-        if not use_gradient_checkpointing:
+        # Warning - but allow disabling for train_img_emb_only mode
+        if not use_gradient_checkpointing and not train_img_emb_only:
             warnings.warn("Gradient checkpointing is detected as disabled. To prevent out-of-memory errors, the training framework will forcibly enable gradient checkpointing.")
             use_gradient_checkpointing = True
+
+        # Option 1: Disable gradient checkpointing for train_img_emb_only (faster, uses more VRAM)
+        if train_img_emb_only:
+            use_gradient_checkpointing = False
+            print("train_img_emb_only: Disabled gradient checkpointing for faster training")
 
         # Load models
         model_configs = self.parse_model_configs(model_paths, model_id_with_origin_paths, fp8_models=fp8_models, offload_models=offload_models, device=device)
@@ -192,8 +198,21 @@ class WanTrainingModule(DiffusionTrainingModule):
     def forward(self, data, inputs=None):
         if inputs is None: inputs = self.get_pipeline_inputs(data)
         inputs = self.transfer_data_to_device(inputs, self.pipe.device, self.pipe.torch_dtype)
-        for unit in self.pipe.units:
-            inputs = self.pipe.unit_runner(unit, self.pipe, *inputs)
+
+        # Option 2: Run frozen encoder units in no_grad for speed
+        if self.train_img_emb_only:
+            # Run units (text/CLIP encoders) without gradient tracking
+            # This is safe because:
+            # - Text encoder is frozen → no gradients needed
+            # - CLIP encoder is frozen → no gradients needed
+            # - clip_feature will be used by img_emb which HAS gradients
+            with torch.no_grad():
+                for unit in self.pipe.units:
+                    inputs = self.pipe.unit_runner(unit, self.pipe, *inputs)
+        else:
+            for unit in self.pipe.units:
+                inputs = self.pipe.unit_runner(unit, self.pipe, *inputs)
+
         loss = self.task_to_loss[self.task](self.pipe, *inputs)
         return loss
 

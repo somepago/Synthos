@@ -18,8 +18,6 @@ def run_validation(model, prompts, height, width, num_frames, output_dir, global
     Note: Validation is run in a separate process or with careful state management
     to avoid corrupting the training pipeline state.
     """
-    import copy
-
     os.makedirs(output_dir, exist_ok=True)
     images_to_log = []
 

@@ -19,7 +19,7 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --model_id_with_origin_paths "Wan-AI/Wan2.1-T2V-1.3B:models_t5_umt5-xxl-enc-bf16.pth,Wan-AI/Wan2.1-T2V-1.3B:Wan2.1_VAE.pth,PAI/Wan2.1-Fun-1.3B-InP:models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth" \
   --learning_rate 1e-4 \
   --num_epochs 50 \
-  --batch_size 8 \
+  --batch_size 32 \
   --gradient_accumulation_steps 2 \
   --remove_prefix_in_ckpt "pipe.dit." \
   --output_path "./models/train/Synthos-I2I-img-emb-only" \
