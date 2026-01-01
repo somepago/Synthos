@@ -9,12 +9,12 @@
 # 2. Or use LoRA on attention layers
 
 accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.py \
-  --dataset_base_path data/contrastyles \
-  --dataset_metadata_path data/contrastyles/metadata.csv \
+  --dataset_base_path data/contrastyles_full \
+  --dataset_metadata_path data/contrastyles_full/metadata.csv \
   --height 480 \
   --width 480 \
   --num_frames 1 \
-  --dataset_repeat 100 \
+  --dataset_repeat 1 \
   --model_paths '["/home/duality/models/Wan-AI/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors"]' \
   --model_id_with_origin_paths "Wan-AI/Wan2.1-T2V-1.3B:models_t5_umt5-xxl-enc-bf16.pth,Wan-AI/Wan2.1-T2V-1.3B:Wan2.1_VAE.pth,PAI/Wan2.1-Fun-1.3B-InP:models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth" \
   --learning_rate 1e-4 \
@@ -31,7 +31,7 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --image_dropout_prob 0.0 \
   --use_wandb \
   --wandb_project "synthos-training" \
-  --wandb_run_name "synthos-i2i-img-emb-only" \
+  --wandb_run_name "synthos-i2i-img-emb-only-full" \
   --validate_steps 200 \
   --validation_prompts "stylized sunset over mountains|cyberpunk city at night|oil painting of a forest" \
-  --validation_images "data/contrastyles/images/0001.jpg,data/contrastyles/images/0002.jpg,data/contrastyles/images/0003.jpg"
+  --validation_images "data/contrastyles_full/images/00000/000000000.jpg,data/contrastyles_full/images/00001/000010000.jpg,data/contrastyles_full/images/00002/000020000.jpg"
