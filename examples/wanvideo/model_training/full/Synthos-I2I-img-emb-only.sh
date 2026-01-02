@@ -10,9 +10,9 @@
 
 accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.py \
   --dataset_base_path data/contrastyles_full \
-  --dataset_metadata_path data/contrastyles_full/metadata.csv \
+  --dataset_metadata_path data/contrastyles_full/metadata_filtered.csv \
   --height 480 \
-  --width 480 \
+  --width 832 \
   --num_frames 1 \
   --dataset_repeat 1 \
   --model_paths '["/home/duality/models/Wan-AI/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors"]' \
@@ -34,4 +34,4 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --wandb_run_name "synthos-i2i-img-emb-only-full" \
   --validate_steps 100 \
   --validation_prompts "stylized sunset over mountains|cyberpunk city at night|oil painting of a forest" \
-  --validation_images "data/contrastyles_full/images/00001/000010007.jpg,data/contrastyles_full/images/00001/000010000.jpg,data/contrastyles_full/images/00002/000020000.jpg"
+  --validation_images "data/contrastyles_full/images/00000/000000030.jpg,data/contrastyles_full/images/00000/000000045.jpg,data/contrastyles_full/images/00000/000000076.jpg"

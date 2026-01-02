@@ -15,7 +15,7 @@ accelerate launch --mixed_precision bf16 examples/wanvideo/model_training/train.
   --dataset_base_path data/contrastyles \
   --dataset_metadata_path data/contrastyles/metadata.csv \
   --height 480 \
-  --width 480 \
+  --width 832 \
   --num_frames 1 \
   --dataset_repeat 100 \
   --model_paths '["/home/duality/models/Wan-AI/Wan2.1-T2V-1.3B/diffusion_pytorch_model.safetensors"]' \
